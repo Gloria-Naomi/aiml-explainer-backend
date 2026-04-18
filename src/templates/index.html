@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SP-105 AIML Explainer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        .container {
+            max-width: 1200px;
+        }
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+        .btn-custom {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 30px;
+            border-radius: 25px;
+            font-weight: 600;
+        }
+        .btn-custom:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            color: white;
+        }
+        .btn-custom:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .result-img {
+            max-width: 100%;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        .loading {
+            display: none;
+        }
+        .spinner-border {
+            width: 2rem;
+            height: 2rem;
+        }
+        .feature-importance {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .progress-bar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="text-center text-white mb-4">
+            <h1 class="display-4 fw-bold">🤖 SP-105 AIML Explainer</h1>
+            <p class="lead">Visualizing Black-Box Models with SHAP and LIME</p>
+        </div>
+
+        <!-- Step 0: Choose Data Source -->
+        <div class="card">
+            <div class="card-body">
+                <h3 class="card-title">📁 Step 0: Choose Data Source</h3>
+                <p class="text-muted">Use sample Iris dataset or upload your own CSV file</p>
+                
+                <div class="btn-group" role="group">
+                    <input type="radio" class="btn-check" name="dataSource" id="sampleData" checked>
+                    <label class="btn btn-outline-primary" for="sampleData">Sample Dataset (Iris)</label>
+                    
+                    <input type="radio" class="btn-check" name="dataSource" id="customData">
+                    <label class="btn btn-outline-primary" for="customData">Upload CSV</label>
+                </div>
+
+                <!-- Custom Dataset Upload Section -->
+                <div id="uploadSection" style="display:none;" class="mt-3">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="fileInput" class="form-label">Select CSV File:</label>
+                            <input type="file" class="form-control" id="fileInput" accept=".csv">
+                        </div>
+                        <div class="col-md-6">
+                            <button id="uploadBtn" class="btn btn-custom mt-4" disabled>Upload Dataset</button>
+                        </div>
+                    </div>
+                    <div id="uploadLoading" class="loading mt-3">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <span class="ms-2">Uploading...</span>
+                    </div>
+                    <div id="uploadResult" class="mt-3"></div>
+                    
+                    <!-- Target Column Selection -->
+                    <div id="targetColumnSection" style="display:none;" class="mt-3">
+                        <label for="targetColumn" class="form-label">Select Target Column:</label>
+                        <select class="form-select" id="targetColumn">
+                            <option value="">Choose...</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+<!-- Step 1: Train Model -->
+        <div class="card">
+            <div class="card-body">
+                <h3 class="card-title">📊 Step 1: Train Model</h3>
+                <p class="text-muted">Train a Random Forest classifier on the selected dataset</p>
+                <button id="trainBtn" class="btn btn-custom">Train Model</button>
+                <button id="metricsBtn" class="btn btn-custom ms-2" disabled style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">View Performance Metrics</button>
+                <div id="trainLoading" class="loading mt-3">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <span class="ms-2">Training model...</span>
+                </div>
+                <div id="trainResult" class="mt-3"></div>
+                <div id="metricsResult" class="mt-3"></div>
+            </div>
+        </div>
+
+        <!-- Step 2: Generate SHAP Explanations -->
+        <div class="card">
+            <div class="card-body">
+                <h3 class="card-title">🔍 Step 2: Generate SHAP Explanations</h3>
+                <p class="text-muted">View global feature importance using SHAP values</p>
+                <button id="shapBtn" class="btn btn-custom" disabled>Generate SHAP Plot</button>
+                <div id="shapLoading" class="loading mt-3">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <span class="ms-2">Generating explanations...</span>
+                </div>
+                <div id="shapResult" class="mt-3"></div>
+            </div>
+        </div>
+
+        <!-- Step 3: Explain Single Instance -->
+        <div class="card">
+            <div class="card-body">
+                <h3 class="card-title">🎯 Step 3: Explain Single Prediction (SHAP)</h3>
+                <p class="text-muted">See detailed SHAP explanations for individual predictions</p>
+                
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <label for="instanceIdx" class="form-label">Select Instance:</label>
+                        <input type="number" class="form-control" id="instanceIdx" min="0" max="29" value="0">
+                    </div>
+                    <div class="col-md-6">
+                        <button id="instanceBtn" class="btn btn-custom mt-3" disabled>Force Plot</button>
+                        <button id="waterfallBtn" class="btn btn-custom mt-3 ms-2" disabled>Waterfall Plot</button>
+                    </div>
+                </div>
+                
+                <div id="instanceLoading" class="loading mt-3">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <span class="ms-2">Generating explanation...</span>
+                </div>
+                <div id="instanceResult" class="mt-3"></div>
+            </div>
+        </div>
+
+        <!-- Step 4: LIME Explanations -->
+        <div class="card">
+            <div class="card-body">
+                <h3 class="card-title">🔬 Step 4: Generate LIME Explanations</h3>
+                <p class="text-muted">Compare LIME local explanations with SHAP</p>
+                <button id="limeBtn" class="btn btn-custom" disabled>Generate LIME Analysis</button>
+                <div id="limeLoading" class="loading mt-3">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <span class="ms-2">Generating LIME explanations...</span>
+                </div>
+                <div id="limeResult" class="mt-3"></div>
+            </div>
+        </div>
+
+<!-- Step 5: LIME Single Instance -->
+        <div class="card">
+            <div class="card-body">
+                <h3 class="card-title">🎨 Step 5: Explain Single Prediction (LIME)</h3>
+                <p class="text-muted">Detailed LIME explanation for individual prediction</p>
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <label for="limeInstanceIdx" class="form-label">Select Instance:</label>
+                        <input type="number" class="form-control" id="limeInstanceIdx" min="0" max="29" value="0">
+                    </div>
+                    <div class="col-md-6">
+                        <button id="limeInstanceBtn" class="btn btn-custom mt-3" disabled>Explain with LIME</button>
+                    </div>
+                </div>
+                <div id="limeInstanceLoading" class="loading mt-3">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <span class="ms-2">Generating LIME explanation...</span>
+                </div>
+                <div id="limeInstanceResult" class="mt-3"></div>
+            </div>
+        </div>
+
+        <!-- Step 6: Download Results -->
+        <div class="card">
+            <div class="card-body">
+                <h3 class="card-title">💾 Step 6: Download Results</h3>
+                <p class="text-muted">Save your analysis report as a text file</p>
+                <button id="downloadBtn" class="btn btn-custom" disabled>Download Report</button>
+                <div id="downloadLoading" class="loading mt-3">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <span class="ms-2">Generating report...</span>
+                </div>
+                <div id="downloadResult" class="mt-3"></div>
+            </div>
+        </div>
+
+        <!-- Step 7: Clear All -->
+        <div class="card">
+            <div class="card-body">
+                <h3 class="card-title">🔄 Step 7: Clear All</h3>
+                <p class="text-muted">Reset everything and start fresh</p>
+                <button id="clearBtn" class="btn btn-danger">Clear All Data</button>
+                <div id="clearResult" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>    <script>
+        let uploadedDatasetInfo = null;
+        let isCustomDataset = false;
+
+        // Toggle between sample and custom dataset
+        document.querySelectorAll('input[name="dataSource"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const uploadSection = document.getElementById('uploadSection');
+                isCustomDataset = e.target.id === 'customData';
+                uploadSection.style.display = isCustomDataset ? 'block' : 'none';
+                
+                // Reset buttons
+                document.getElementById('trainBtn').disabled = false;
+                document.getElementById('shapBtn').disabled = true;
+                document.getElementById('instanceBtn').disabled = true;
+                document.getElementById('limeBtn').disabled = true;
+                document.getElementById('limeInstanceBtn').disabled = true;
+            });
+        });
+
+        // Enable upload button when file selected
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            document.getElementById('uploadBtn').disabled = !e.target.files.length;
+        });
+
+        // Upload Dataset
+        document.getElementById('uploadBtn').addEventListener('click', async () => {
+            const fileInput = document.getElementById('fileInput');
+            const loading = document.getElementById('uploadLoading');
+            const result = document.getElementById('uploadResult');
+            const targetSection = document.getElementById('targetColumnSection');
+            const targetSelect = document.getElementById('targetColumn');
+            
+            if (!fileInput.files.length) return;
+            
+            loading.style.display = 'block';
+            result.innerHTML = '';
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            
+            try {
+                const response = await fetch('/upload_dataset', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    uploadedDatasetInfo = data.dataset_info;
+                    
+                    // Populate target column dropdown
+                    targetSelect.innerHTML = '<option value="">Choose...</option>';
+                    data.dataset_info.columns.forEach(col => {
+                        targetSelect.innerHTML += `<option value="${col}">${col}</option>`;
+                    });
+                    
+                    // Show dataset info
+                    result.innerHTML = `
+                        <div class="alert alert-success">
+                            <h5>✅ Dataset Uploaded Successfully!</h5>
+                            <p><strong>Filename:</strong> ${data.dataset_info.filename}</p>
+                            <p><strong>Rows:</strong> ${data.dataset_info.n_rows}</p>
+                            <p><strong>Columns:</strong> ${data.dataset_info.n_columns}</p>
+                            <p><strong>Features:</strong> ${data.dataset_info.columns.join(', ')}</p>
+                        </div>
+                    `;
+                    
+                    targetSection.style.display = 'block';
+                    document.getElementById('trainBtn').disabled = false;
+                } else {
+                    result.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+
+        // Train Model
+        document.getElementById('trainBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('trainBtn');
+            const loading = document.getElementById('trainLoading');
+            const result = document.getElementById('trainResult');
+            
+            btn.disabled = true;
+            loading.style.display = 'block';
+            result.innerHTML = '';
+            
+            let endpoint = '/train_model';
+            let requestBody = null;
+            
+            if (isCustomDataset) {
+                const targetColumn = document.getElementById('targetColumn').value;
+                if (!targetColumn) {
+                    result.innerHTML = '<div class="alert alert-danger">Please select a target column</div>';
+                    loading.style.display = 'none';
+                    btn.disabled = false;
+                    return;
+                }
+                endpoint = '/train_custom_model';
+                requestBody = JSON.stringify({ target_column: targetColumn });
+            }
+            
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: requestBody ? { 'Content-Type': 'application/json' } : {},
+                    body: requestBody
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    result.innerHTML = `
+                        <div class="alert alert-success">
+                            <h5>✅ Model Trained Successfully!</h5>
+                            <p><strong>Accuracy:</strong> ${(data.accuracy * 100).toFixed(2)}%</p>
+                            <p><strong>Training samples:</strong> ${data.n_samples}</p>
+                            <p><strong>Features:</strong> ${data.n_features}</p>
+                            ${data.features ? `<p><strong>Feature names:</strong> ${data.features.join(', ')}</p>` : ''}
+                        </div>
+                    `;
+                    document.getElementById('shapBtn').disabled = false;
+                    document.getElementById('instanceBtn').disabled = false;
+                    document.getElementById('limeBtn').disabled = false;
+                    document.getElementById('limeInstanceBtn').disabled = false;
+                    document.getElementById('downloadBtn').disabled = false;
+                    document.getElementById('waterfallBtn').disabled = false;
+                    document.getElementById('downloadBtn').disabled = false; 
+                    document.getElementById('metricsBtn').disabled = false; 
+                } else {
+                    result.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            } finally {
+                loading.style.display = 'none';
+                btn.disabled = false;
+            }
+        });
+
+        // View Performance Metrics
+        document.getElementById('metricsBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('metricsBtn');
+            const result = document.getElementById('metricsResult');
+            
+            btn.disabled = true;
+            result.innerHTML = '<div class="spinner-border text-primary" role="status"></div><span class="ms-2">Calculating metrics...</span>';
+            
+            try {
+                const response = await fetch('/get_performance_metrics', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Build metrics table
+                    let metricsHTML = `
+                        <div class="alert alert-info">
+                            <h5>📈 Model Performance Metrics</h5>
+                            <p><strong>Overall Accuracy:</strong> ${(data.accuracy * 100).toFixed(2)}%</p>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Classification Report:</h6>
+                                <table class="table table-sm table-bordered">
+                                    <thead>
+                                        <tr>
+                                            <th>Class</th>
+                                            <th>Precision</th>
+                                            <th>Recall</th>
+                                            <th>F1-Score</th>
+                                            <th>Support</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                    `;
+                    
+                    for (const [className, metrics] of Object.entries(data.metrics_by_class)) {
+                        metricsHTML += `
+                            <tr>
+                                <td><strong>${className}</strong></td>
+                                <td>${metrics.precision}</td>
+                                <td>${metrics.recall}</td>
+                                <td>${metrics['f1-score']}</td>
+                                <td>${metrics.support}</td>
+                            </tr>
+                        `;
+                    }
+                    
+                    metricsHTML += `
+                                        <tr class="table-active">
+                                            <td><strong>Macro Avg</strong></td>
+                                            <td>${data.macro_avg.precision}</td>
+                                            <td>${data.macro_avg.recall}</td>
+                                            <td>${data.macro_avg['f1-score']}</td>
+                                            <td>-</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Confusion Matrix:</h6>
+                                <img src="data:image/png;base64,${data.confusion_matrix_img}" class="result-img" alt="Confusion Matrix">
+                            </div>
+                        </div>
+                    `;
+                    
+                    result.innerHTML = metricsHTML;
+                } else {
+                    result.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        // Generate SHAP
+        document.getElementById('shapBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('shapBtn');
+            const loading = document.getElementById('shapLoading');
+            const result = document.getElementById('shapResult');
+            
+            btn.disabled = true;
+            loading.style.display = 'block';
+            result.innerHTML = '';
+            
+            try {
+                const response = await fetch('/generate_shap', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    let importanceHTML = '<div class="feature-importance"><h5>Feature Importance:</h5><ul class="list-group">';
+                    data.feature_importance.forEach(item => {
+                        const percentage = (item.importance * 100).toFixed(2);
+                        importanceHTML += `
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                ${item.feature}
+                                <span class="badge bg-primary rounded-pill">${percentage}%</span>
+                            </li>
+                        `;
+                    });
+                    importanceHTML += '</ul></div>';
+                    
+                    result.innerHTML = `
+                        <div class="alert alert-success">
+                            <h5>✅ SHAP Explanations Generated!</h5>
+                            <p><strong>Samples explained:</strong> ${data.n_samples_explained}</p>
+                        </div>
+                        ${importanceHTML}
+                        <img src="data:image/png;base64,${data.plot_image}" class="result-img" alt="SHAP Summary Plot">
+                    `;
+                } else {
+                    result.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            } finally {
+                loading.style.display = 'none';
+                btn.disabled = false;
+            }
+        });
+
+        // Explain Instance (SHAP)
+        document.getElementById('instanceBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('instanceBtn');
+            const loading = document.getElementById('instanceLoading');
+            const result = document.getElementById('instanceResult');
+            const idx = document.getElementById('instanceIdx').value;
+            
+            btn.disabled = true;
+            loading.style.display = 'block';
+            result.innerHTML = '';
+            
+            try {
+                const response = await fetch('/explain_instance', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ instance_idx: parseInt(idx) })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    const probaHTML = data.prediction_proba.map((p, i) => 
+                        `<div class="progress-bar" style="width: ${(p*100).toFixed(1)}%">${(p*100).toFixed(1)}% Class ${i}</div>`
+                    ).join('');
+                    
+                    result.innerHTML = `
+                        <div class="alert alert-success">
+                            <h5>✅ Instance Explanation Generated!</h5>
+                            <p><strong>Predicted Class:</strong> ${data.prediction}</p>
+                            <div class="progress" style="height: 30px;">
+                                ${probaHTML}
+                            </div>
+                        </div>
+                        <img src="data:image/png;base64,${data.plot_image}" class="result-img" alt="SHAP Force Plot">
+                    `;
+                } else {
+                    result.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            } finally {
+                loading.style.display = 'none';
+                btn.disabled = false;
+            }
+        });
+
+        // Generate LIME
+        document.getElementById('limeBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('limeBtn');
+            const loading = document.getElementById('limeLoading');
+            const result = document.getElementById('limeResult');
+            
+            btn.disabled = true;
+            loading.style.display = 'block';
+            result.innerHTML = '';
+            
+            try {
+                const response = await fetch('/generate_lime', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    let importanceHTML = '<div class="feature-importance"><h5>LIME Feature Importance:</h5><ul class="list-group">';
+                    data.feature_importance.forEach(item => {
+                        const percentage = (item.importance * 100).toFixed(2);
+                        importanceHTML += `
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                ${item.feature}
+                                <span class="badge bg-success rounded-pill">${percentage}%</span>
+                            </li>
+                        `;
+                    });
+                    importanceHTML += '</ul></div>';
+                    
+                    result.innerHTML = `
+                        <div class="alert alert-success">
+                            <h5>✅ LIME Explanations Generated!</h5>
+                            <p><strong>Instances explained:</strong> ${data.n_instances_explained}</p>
+                            <p class="text-muted">LIME uses a different method than SHAP - it creates a simple model around each prediction to explain it.</p>
+                        </div>
+                        ${importanceHTML}
+                    `;
+                } else {
+                    result.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            } finally {
+                loading.style.display = 'none';
+                btn.disabled = false;
+            }
+        });
+
+        // LIME Instance Explanation
+        document.getElementById('limeInstanceBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('limeInstanceBtn');
+            const loading = document.getElementById('limeInstanceLoading');
+            const result = document.getElementById('limeInstanceResult');
+            const idx = document.getElementById('limeInstanceIdx').value;
+            
+            btn.disabled = true;
+            loading.style.display = 'block';
+            result.innerHTML = '';
+            
+            try {
+                const response = await fetch('/explain_instance_lime', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ instance_idx: parseInt(idx) })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    const probaHTML = data.prediction_proba.map((p, i) => 
+                        `<div class="progress-bar bg-success" style="width: ${(p*100).toFixed(1)}%">${(p*100).toFixed(1)}% Class ${i}</div>`
+                    ).join('');
+                    
+                    result.innerHTML = `
+                        <div class="alert alert-success">
+                            <h5>✅ LIME Instance Explanation Generated!</h5>
+                            <p><strong>Predicted Class:</strong> ${data.prediction}</p>
+                            <div class="progress" style="height: 30px;">
+                                ${probaHTML}
+                            </div>
+                            <p class="mt-2 text-muted">Green bars show features that push toward this prediction (positive weight), while features with negative weights push against it.</p>
+                        </div>
+                        <img src="data:image/png;base64,${data.plot_image}" class="result-img" alt="LIME Explanation">
+                    `;
+                } else {
+                    result.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            } finally {
+                loading.style.display = 'none';
+                btn.disabled = false;
+            }
+        });
+
+        // Download Results
+        document.getElementById('downloadBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('downloadBtn');
+            const loading = document.getElementById('downloadLoading');
+            const result = document.getElementById('downloadResult');
+            
+            btn.disabled = true;
+            loading.style.display = 'block';
+            result.innerHTML = '';
+            
+            try {
+                const response = await fetch('/download_results', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Create download link
+                    const blob = new Blob([data.report], { type: 'text/plain' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = data.filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    result.innerHTML = `
+                        <div class="alert alert-success">
+                            <h5>✅ Report Downloaded!</h5>
+                            <p>Check your downloads folder for <strong>${data.filename}</strong></p>
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            } finally {
+                loading.style.display = 'none';
+                btn.disabled = false;
+            }
+        });
+        // Waterfall Plot
+        document.getElementById('waterfallBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('waterfallBtn');
+            const loading = document.getElementById('instanceLoading');
+            const result = document.getElementById('instanceResult');
+            const idx = document.getElementById('instanceIdx').value;
+            
+            btn.disabled = true;
+            loading.style.display = 'block';
+            result.innerHTML = '';
+            
+            try {
+                const response = await fetch('/generate_waterfall', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ instance_idx: parseInt(idx) })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    const probaHTML = data.prediction_proba.map((p, i) => 
+                        `<div class="progress-bar" style="width: ${(p*100).toFixed(1)}%">${(p*100).toFixed(1)}% Class ${i}</div>`
+                    ).join('');
+                    
+                    result.innerHTML = `
+                        <div class="alert alert-success">
+                            <h5>✅ Waterfall Plot Generated!</h5>
+                            <p><strong>Instance:</strong> ${data.instance_idx}</p>
+                            <p><strong>Predicted Class:</strong> ${data.prediction}</p>
+                            <div class="progress" style="height: 30px;">
+                                ${probaHTML}
+                            </div>
+                        </div>
+                        <img src="data:image/png;base64,${data.plot_image}" class="result-img" alt="SHAP Waterfall Plot">
+                        <p class="text-muted mt-2"><small>The waterfall plot shows how each feature contributes to pushing the prediction from the base value (average prediction) to the final prediction.</small></p>
+                    `;
+                } else {
+                    result.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            } finally {
+                loading.style.display = 'none';
+                btn.disabled = false;
+            }
+        });
+        // Clear All Function
+        document.getElementById('clearBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('clearBtn');
+            const result = document.getElementById('clearResult');
+            
+            // Confirm with user
+            if (!confirm('Are you sure you want to clear all data? This will reset everything.')) {
+                return;
+            }
+            
+            btn.disabled = true;
+            
+            try {
+                // Reset all result areas
+                document.getElementById('uploadResult').innerHTML = '';
+                document.getElementById('trainResult').innerHTML = '';
+                document.getElementById('shapResult').innerHTML = '';
+                document.getElementById('instanceResult').innerHTML = '';
+                document.getElementById('limeResult').innerHTML = '';
+                document.getElementById('limeInstanceResult').innerHTML = '';
+                document.getElementById('downloadResult').innerHTML = '';
+                document.getElementById('metricsResult').innerHTML = '';
+                
+                // Reset file input
+                document.getElementById('fileInput').value = '';
+                
+                // Hide upload section
+                document.getElementById('uploadSection').style.display = 'none';
+                document.getElementById('targetColumnSection').style.display = 'none';
+                
+                // Reset to sample dataset
+                document.getElementById('sampleData').checked = true;
+                isCustomDataset = false;
+                uploadedDatasetInfo = null;
+                
+                // Reset all input fields
+                document.getElementById('instanceIdx').value = 0;
+                document.getElementById('limeInstanceIdx').value = 0;
+                document.getElementById('targetColumn').value = '';
+                
+                // Disable all buttons except train
+                document.getElementById('trainBtn').disabled = false;
+                document.getElementById('uploadBtn').disabled = true;
+                document.getElementById('shapBtn').disabled = true;
+                document.getElementById('instanceBtn').disabled = true;
+                document.getElementById('waterfallBtn').disabled = true;
+                document.getElementById('limeBtn').disabled = true;
+                document.getElementById('limeInstanceBtn').disabled = true;
+                document.getElementById('downloadBtn').disabled = true;
+                document.getElementById('metricsBtn').disabled = true; 
+                
+                // Show success message
+                result.innerHTML = `
+                    <div class="alert alert-success">
+                        <h5>✅ All Data Cleared!</h5>
+                        <p>Everything has been reset. You can start fresh now.</p>
+                    </div>
+                `;
+                
+                // Clear success message after 3 seconds
+                setTimeout(() => {
+                    result.innerHTML = '';
+                }, 3000);
+                
+            } catch (error) {
+                result.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
