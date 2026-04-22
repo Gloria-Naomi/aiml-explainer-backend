@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+*.db
+.DS_Store
+venv/
+.venv/
+data/temp/
+data/uploads/
+flask_session/
+instance/
+src/.env
+src/.gitignore
