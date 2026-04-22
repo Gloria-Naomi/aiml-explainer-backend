@@ -14,13 +14,13 @@
 ## 📸 Demo
 
 ### Step 1 — Train Model & View Performance
-![Model Performance](screenshots/performance.png)
+![Model Performance](src/screenshots/performance.png)
 
 ### Step 2 — SHAP Global Feature Importance
-![SHAP Output](screenshots/shap.png)
+![SHAP Output](src/screenshots/shap.png)
 
 ### Step 3 — SHAP Waterfall (Single Prediction)
-![Waterfall Plot](screenshots/waterfall.png)
+![Waterfall Plot](src/screenshots/waterfall.png)
 
 ---
 
